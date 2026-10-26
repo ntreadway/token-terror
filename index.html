@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TOKEN TERROR</title>
+<style>
+  :root { --org:#ff8a1f; --grn:#3dff8a; --red:#ff3355; --pur:#b36bff; --bg:#05020a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { width:100%; height:100%; background:var(--bg); overflow:hidden; color:#e9e4f5;
+    font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace; user-select:none; }
+  #game { position:fixed; inset:0; }
+  #game canvas { display:block; }
+  body.muse #game canvas { animation:jitter .35s steps(2) infinite; }
+  @keyframes jitter {
+    0%{transform:translate(0,0);filter:hue-rotate(0)}
+    25%{transform:translate(-2px,1px);filter:hue-rotate(25deg) saturate(.7)}
+    50%{transform:translate(2px,-1px);filter:hue-rotate(-20deg) saturate(.6)}
+    75%{transform:translate(-1px,-2px);filter:hue-rotate(10deg) saturate(.8)}
+    100%{transform:translate(1px,2px);filter:hue-rotate(0) saturate(.7)}
+  }
+  #fx { position:fixed; inset:0; pointer-events:none; z-index:2;
+    background:radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.65) 100%); }
+  body.muse #fx { background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 2px, transparent 2px 4px),
+      radial-gradient(ellipse at center, transparent 20%, rgba(10,0,20,.92) 100%); }
+  #flash { position:fixed; inset:0; pointer-events:none; z-index:3; opacity:0; background:#fff; }
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:4; display:none; }
+  #left { position:absolute; top:18px; left:20px; width:min(340px,60vw); }
+  .label { font-size:12px; letter-spacing:.18em; color:#a99cc4; display:flex; justify-content:space-between; }
+  #mode { color:var(--org); font-weight:700; }
+  body.muse #mode { color:var(--pur); animation:blink .5s steps(2) infinite; }
+  @keyframes blink { 50%{opacity:.3} }
+  #bar { height:16px; margin-top:6px; border:1px solid #5b4a7a; background:#120a1e; position:relative; }
+  #fill { height:100%; width:100%; background:linear-gradient(90deg,#ff5a00,var(--org)); box-shadow:0 0 12px var(--org); transition:width .1s linear; }
+  #bar.low #fill { background:linear-gradient(90deg,#ff0033,#ff3355); box-shadow:0 0 14px var(--red); animation:blink .4s steps(2) infinite; }
+  #tokNum { font-size:26px; font-weight:700; margin-top:4px; color:var(--org); text-shadow:0 0 10px rgba(255,138,31,.6); }
+  body.muse #tokNum { color:var(--pur); text-shadow:0 0 10px rgba(179,107,255,.6); font-size:16px; }
+  #hearts { font-size:22px; margin-top:6px; letter-spacing:4px; filter:drop-shadow(0 0 6px rgba(255,51,85,.7)); }
+  #right { position:absolute; top:18px; right:20px; text-align:right; }
+  #score { font-size:34px; font-weight:700; color:#fff; text-shadow:0 0 12px rgba(255,255,255,.35); }
+  #meta { font-size:12px; letter-spacing:.14em; color:#a99cc4; margin-top:2px; line-height:1.6; }
+  #combo { color:var(--grn); font-weight:700; }
+  #banner { position:absolute; top:26%; left:0; right:0; text-align:center; opacity:0; transition:opacity .25s; padding:0 20px; }
+  #banner.show { opacity:1; }
+  #banner h1 { font-size:clamp(28px,6vw,64px); letter-spacing:.12em; text-shadow:0 0 24px currentColor; }
+  #banner p { margin-top:10px; font-size:clamp(13px,1.8vw,18px); color:#d8cff0; }
+  #whisper { position:absolute; bottom:70px; left:0; right:0; text-align:center; color:var(--pur); font-size:15px; opacity:0; transition:opacity .4s; text-shadow:0 0 10px rgba(179,107,255,.6); padding:0 20px; }
+  #whisper.show { opacity:1; }
+  #hint { position:absolute; bottom:16px; left:0; right:0; text-align:center; font-size:11px; letter-spacing:.14em; color:#7d7096; }
+  #lesson { position:absolute; left:20px; bottom:104px; width:min(400px,86vw); padding:12px 14px; font-size:13px; line-height:1.55;
+    background:rgba(10,24,16,.88); border:1px solid var(--grn); color:#d9ffe8; opacity:0; transform:translateY(8px); transition:all .3s; box-shadow:0 0 16px rgba(61,255,138,.25); }
+  #lesson.show { opacity:1; transform:none; }
+  #lesson b { display:block; color:var(--grn); letter-spacing:.14em; font-size:11px; margin-bottom:4px; }
+  #ticker { position:absolute; left:0; right:0; bottom:40px; text-align:center; font-size:12px; color:#7d7096; }
+  #ticker .chip { display:inline-block; white-space:pre; margin:0 2px; padding:2px 6px; color:#000; font-weight:700; border-radius:3px; }
+  .quiz-opt { display:block; width:100%; margin-top:10px; text-align:left; font-size:14px; letter-spacing:.04em; padding:12px 16px; }
+  .why { margin-top:16px; text-align:left; font-size:14px; line-height:1.65; color:#d9ffe8; border:1px solid var(--grn); padding:12px 16px; background:rgba(10,24,16,.8); }
+  .overlay { position:fixed; inset:0; z-index:6; display:flex; align-items:center; justify-content:center;
+    background:rgba(5,2,10,.78); text-align:center; padding:20px; }
+  .overlay.hidden { display:none; }
+  .card { max-width:640px; }
+  .card h1 { font-size:clamp(40px,9vw,96px); line-height:.95; letter-spacing:.06em; color:var(--org);
+    text-shadow:0 0 30px rgba(255,138,31,.7), 3px 0 0 rgba(255,51,85,.6), -3px 0 0 rgba(61,255,138,.35); animation:flick 3.2s infinite; }
+  @keyframes flick { 0%,92%,100%{opacity:1} 94%{opacity:.4} 96%{opacity:1} 97%{opacity:.6} }
+  .card .tag { margin-top:14px; font-size:15px; color:#c8bde0; letter-spacing:.08em; }
+  .rules { margin:22px auto 0; text-align:left; font-size:13px; line-height:1.75; color:#cfc6e6; border:1px solid #3a2b55; padding:14px 18px; background:rgba(18,10,30,.7); }
+  .rules b.c { color:var(--org); } .rules b.m { color:var(--pur); } .rules b.g { color:var(--grn); }
+  button { margin-top:24px; font:inherit; font-size:16px; letter-spacing:.2em; padding:14px 32px; cursor:pointer;
+    background:transparent; color:var(--org); border:2px solid var(--org); pointer-events:auto; box-shadow:0 0 18px rgba(255,138,31,.4); transition:all .15s; }
+  button:hover { background:var(--org); color:#000; }
+  .big { font-size:clamp(30px,6vw,56px); font-weight:700; color:#fff; }
+  .stat { margin-top:8px; color:#c8bde0; font-size:15px; letter-spacing:.1em; }
+  .best { color:var(--grn); }
+  .flavor { margin-top:20px; color:var(--pur); font-size:14px; font-style:italic; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="fx"></div>
+<div id="flash"></div>
+
+<div id="hud">
+  <div id="left">
+    <div class="label"><span>CONTEXT TOKENS</span><span id="mode">CLAUDE MODE</span></div>
+    <div id="bar"><div id="fill"></div></div>
+    <div id="tokNum">100</div>
+    <div id="hearts"></div>
+  </div>
+  <div id="right">
+    <div id="score">0</div>
+    <div id="meta">WAVE <span id="wave">1</span> &nbsp;·&nbsp; BEST <span id="best">0</span><br><span id="combo"></span></div>
+  </div>
+  <div id="banner"><h1 id="bh"></h1><p id="bp"></p></div>
+  <div id="whisper"></div>
+  <div id="lesson"></div>
+  <div id="ticker"></div>
+  <div id="hint">WASD / ARROWS MOVE &nbsp;·&nbsp; MOUSE AIM &nbsp;·&nbsp; HOLD CLICK / SPACE FIRE &nbsp;·&nbsp; P PAUSE &nbsp;·&nbsp; M MUTE</div>
+</div>
+
+<div id="screen" class="overlay"></div>
+
+<script src="three.min.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const rand = (a, b) => a + Math.random() * (b - a);
+const lerp = (a, b, t) => a + (b - a) * t;
+const ARENA = 26;
+const TAU = Math.PI * 2;
+
+/* ---------- maze (13x13 cells; '#' wall, '.' open) ---------- */
+const MAZE = [
+  '.............',
+  '.###..#..###.',
+  '.#.........#.',
+  '.#.##...##.#.',
+  '......#......',
+  '.##.#...#.##.',
+  '.#.........#.',
+  '.##.#...#.##.',
+  '......#......',
+  '.#.##...##.#.',
+  '.#.........#.',
+  '.###..#..###.',
+  '.............',
+];
+const N = MAZE.length, CELL = ARENA * 2 / N;
+const wallAt = (cx, cz) => cx < 0 || cz < 0 || cx >= N || cz >= N || MAZE[cz][cx] === '#';
+const cellOf = v => Math.floor((v + ARENA) / CELL);
+const cellCenter = c => -ARENA + CELL * (c + .5);
+const openCells = [];
+for (let cz = 0; cz < N; cz++) for (let cx = 0; cx < N; cx++) if (!wallAt(cx, cz)) openCells.push({ cx, cz });
+function hitsWall(x, z, r) {
+  const x0 = cellOf(x - r), x1 = cellOf(x + r), z0 = cellOf(z - r), z1 = cellOf(z + r);
+  for (let cz = z0; cz <= z1; cz++) for (let cx = x0; cx <= x1; cx++) {
+    if (!wallAt(cx, cz)) continue;
+    const nx = Math.max(-ARENA + cx * CELL, Math.min(x, -ARENA + (cx + 1) * CELL));
+    const nz = Math.max(-ARENA + cz * CELL, Math.min(z, -ARENA + (cz + 1) * CELL));
+    if ((x - nx) ** 2 + (z - nz) ** 2 < r * r) return true;
+  }
+  return false;
+}
+
+/* ---------- three setup ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+$('game').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05020a);
+scene.fog = new THREE.FogExp2(0x05020a, 0.018);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 24, 14);
+
+const ambient = new THREE.AmbientLight(0x442266, 0.7);
+scene.add(ambient);
+const moon = new THREE.DirectionalLight(0x7788ff, 0.4);
+moon.position.set(-10, 30, 10);
+scene.add(moon);
+const pLight = new THREE.PointLight(0xff8a1f, 2.2, 30, 1.4);
+scene.add(pLight);
+
+// ground + terminal grid
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(260, 260),
+  new THREE.MeshStandardMaterial({ color: 0x0b0714, roughness: 1 })
+);
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+const grid = new THREE.GridHelper(ARENA * 2, 26, 0x1fff7a, 0x0a4a2a);
+grid.position.y = 0.02;
+grid.material.transparent = true; grid.material.opacity = 0.55;
+scene.add(grid);
+const border = new THREE.LineLoop(
+  new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-ARENA, .06, -ARENA), new THREE.Vector3(ARENA, .06, -ARENA),
+    new THREE.Vector3(ARENA, .06, ARENA), new THREE.Vector3(-ARENA, .06, ARENA)]),
+  new THREE.LineBasicMaterial({ color: 0x3dff8a })
+);
+scene.add(border);
+
+// neon maze walls
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x140c24, emissive: 0x0a0618, roughness: .8 });
+const edgeMat = new THREE.LineBasicMaterial({ color: 0x3dff8a });
+const wallGeo = new THREE.BoxGeometry(CELL - .1, 1.2, CELL - .1), edgeGeo = new THREE.EdgesGeometry(wallGeo);
+for (let cz = 0; cz < N; cz++) for (let cx = 0; cx < N; cx++) {
+  if (MAZE[cz][cx] !== '#') continue;
+  const w = new THREE.Mesh(wallGeo, wallMat), e = new THREE.LineSegments(edgeGeo, edgeMat);
+  w.position.set(cellCenter(cx), .6, cellCenter(cz)); e.position.copy(w.position);
+  scene.add(w, e);
+}
+const pelletGeo = new THREE.SphereGeometry(.22, 8, 6), pelletMat = new THREE.MeshBasicMaterial({ color: 0xffc27a });
+function spawnPellets() {
+  for (const c of openCells) {
+    if (c.cx === 6 && c.cz === 6) continue;
+    const m = new THREE.Mesh(pelletGeo, pelletMat);
+    m.position.set(cellCenter(c.cx), .5, cellCenter(c.cz));
+    scene.add(m); pellets.push({ mesh: m });
+  }
+}
+function randomOpen(minDist) {
+  for (let i = 0; i < 30; i++) {
+    const c = openCells[(Math.random() * openCells.length) | 0], x = cellCenter(c.cx), z = cellCenter(c.cz);
+    if (!minDist || Math.hypot(x - player.position.x, z - player.position.z) > minDist) return new THREE.Vector3(x, 0, z);
+  }
+  return new THREE.Vector3(cellCenter(0), 0, cellCenter(0));
+}
+// BFS flow field so ghosts path through corridors toward the player
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+let flow = null, flowKey = '';
+function updateFlow() {
+  const pc = cellOf(player.position.x), pz = cellOf(player.position.z), key = pc + ',' + pz;
+  if (key === flowKey) return; flowKey = key;
+  flow = Array.from({ length: N }, () => new Array(N).fill(-1));
+  if (wallAt(pc, pz)) return;
+  const q = [[pc, pz]]; flow[pz][pc] = 0;
+  for (let i = 0; i < q.length; i++) {
+    const [x, z] = q[i];
+    for (const [dx, dz] of DIRS) {
+      const nx = x + dx, nz = z + dz;
+      if (wallAt(nx, nz) || flow[nz][nx] >= 0) continue;
+      flow[nz][nx] = flow[z][x] + 1; q.push([nx, nz]);
+    }
+  }
+}
+const chase = { x: 0, z: 0 };
+function chaseDir(pos, toX, toZ, d) {
+  chase.x = toX / d; chase.z = toZ / d;
+  const cx = cellOf(pos.x), cz = cellOf(pos.z);
+  if (!flow || wallAt(cx, cz) || flow[cz][cx] <= 0) return chase;   // same cell as player: go straight
+  let best = null, bd = flow[cz][cx];
+  for (const [dx, dz] of DIRS) {
+    const nx = cx + dx, nz = cz + dz;
+    if (!wallAt(nx, nz) && flow[nz][nx] >= 0 && flow[nz][nx] < bd) { bd = flow[nz][nx]; best = [nx, nz]; }
+  }
+  if (best) {
+    const tx = cellCenter(best[0]) - pos.x, tz = cellCenter(best[1]) - pos.z, l = Math.hypot(tx, tz) || 1;
+    chase.x = tx / l; chase.z = tz / l;
+  }
+  return chase;
+}
+
+// graveyard decor outside the arena + corner jack-o-lanterns
+const stoneMat = new THREE.MeshStandardMaterial({ color: 0x2a2438, roughness: .9 });
+for (let i = 0; i < 70; i++) {
+  const a = rand(0, TAU), r = rand(ARENA * 1.42, ARENA * 2.4);
+  const x = Math.cos(a) * r, z = Math.sin(a) * r;
+  if (Math.abs(x) < ARENA + 3 && Math.abs(z) < ARENA + 3) continue;
+  const h = rand(1.2, 3);
+  const s = new THREE.Mesh(new THREE.BoxGeometry(rand(.9, 1.6), h, .35), stoneMat);
+  s.position.set(x, h / 2, z);
+  s.rotation.set(rand(-.15, .15), rand(0, TAU), rand(-.2, .2));
+  scene.add(s);
+}
+function pumpkin(scale = 1) {
+  const g = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color: 0xff7a10, emissive: 0xff5500, emissiveIntensity: .7, roughness: .6 });
+  const b = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), m);
+  b.scale.set(1, .82, 1); g.add(b);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(.12, .18, .4, 6), new THREE.MeshStandardMaterial({ color: 0x2f5a1a }));
+  stem.position.y = .85; g.add(stem);
+  const eyeM = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+  for (const sx of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.ConeGeometry(.2, .3, 3), eyeM);
+    e.position.set(sx * .38, .15, .88); e.rotation.x = Math.PI / 2; e.rotation.z = Math.PI; g.add(e);
+  }
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(.7, .14, .1), eyeM);
+  mouth.position.set(0, -.3, .92); g.add(mouth);
+  g.scale.setScalar(scale);
+  return g;
+}
+const cornerLights = [];
+for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+  const p = pumpkin(1.6); p.position.set(sx * (ARENA + 2), 1.3, sz * (ARENA + 2));
+  p.rotation.y = Math.atan2(-sx, -sz); scene.add(p);
+  const l = new THREE.PointLight(0xff6a00, 1.2, 22, 1.6); l.position.set(sx * (ARENA + 1), 3, sz * (ARENA + 1));
+  scene.add(l); cornerLights.push(l);
+}
+
+/* ---------- player ---------- */
+const player = new THREE.Group();
+{
+  // Clawd-style blocky orange mascot: wide body, square eyes, nub arms, four legs
+  const skin = new THREE.MeshStandardMaterial({ color: 0xd97757, emissive: 0xd97757, emissiveIntensity: .35, roughness: .7 });
+  const box = (w, h, d, x, y, z, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); player.add(m); return m; };
+  box(2.2, 1.35, 1.3, 0, 1.45, 0, skin);               // body
+  box(.5, .55, .6, -1.35, 1.2, 0, skin);               // arms
+  box(.5, .55, .6, 1.35, 1.2, 0, skin);
+  const eyeM = new THREE.MeshBasicMaterial({ color: 0x120a0a });
+  box(.28, .4, .1, -.5, 1.6, .67, eyeM);               // eyes (face +z)
+  box(.28, .4, .1, .5, 1.6, .67, eyeM);
+  const legs = [];
+  for (const x of [-.8, -.27, .27, .8]) legs.push(box(.3, .8, .35, x, .4, 0, skin));
+  player.userData.legs = legs; player.userData.skin = skin;
+  const cursor = new THREE.Mesh(new THREE.BoxGeometry(.12, .4, .12), new THREE.MeshBasicMaterial({ color: 0x3dff8a }));
+  cursor.position.set(1.2, 2.5, .5); player.add(cursor);
+  player.userData.cursor = cursor;
+}
+scene.add(player);
+
+/* ---------- state ---------- */
+const TYPES = {
+  limit:    { r: .95, hp: 2, speed: 2.7, color: 0xe6e6ff, score: 10 },
+  e429:     { r: .7,  hp: 1, speed: 5.0, color: 0xff3355, score: 15 },
+  overflow: { r: 1.7, hp: 9, speed: 1.7, color: 0xb36bff, score: 60, split: true },
+};
+let state = 'title', paused = false;
+let G;
+let best = 0;
+try { best = +localStorage.getItem('tokenTerrorBest') || 0; } catch (e) {}
+const enemies = [], bullets = [], orbs = [], parts = [], pellets = [];
+const keys = {};
+let mouseDown = false;
+const mouseNDC = new THREE.Vector2(0, 0);
+const aimPoint = new THREE.Vector3(0, 0, -5);
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+function newGame() {
+  for (const arr of [enemies, bullets, orbs, parts, pellets]) { arr.forEach(o => { scene.remove(o.mesh); }); arr.length = 0; }
+  flowKey = ''; spawnPellets();
+  G = {
+    t: 0, score: 0, kills: 0, hp: 3, tokens: 100, muse: false, mv: 0, wave: 1,
+    vel: new THREE.Vector3(), invuln: 0, fireCd: 0, spawnCd: 1, orbCd: 3, fakeCd: 2, clockCd: 28,
+    combo: 0, comboT: 0, shake: 0, whisperCd: 7, beepCd: 0, museTime: 0, resets: 0, revived: false,
+  };
+  player.position.set(0, 0, 0);
+  setMuse(false, true);
+  updateHUD();
+}
+
+/* ---------- audio ---------- */
+let ac = null, muted = false;
+function beep(f, d = .1, type = 'square', v = .04, slide = 0) {
+  if (muted) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain(), n = ac.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, n);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), n + d);
+    g.gain.setValueAtTime(v, n); g.gain.exponentialRampToValueAtTime(.0001, n + d);
+    o.connect(g); g.connect(ac.destination); o.start(n); o.stop(n + d);
+  } catch (e) {}
+}
+
+/* ---------- helpers ---------- */
+const MUSE_LINES = [
+  'Claude has left the chat. Switching to Muse-lite...',
+  'Your limit resets in 4h 59m. You have 3 hearts.',
+  'Muse says: "I have refactored everything." (It did not.)',
+  'Fallback model engaged. Expectations lowered.',
+];
+const WHISPERS = [
+  'Muse: "I fixed it. I deleted the tests."',
+  'Muse: "Great question! Here is a completely different answer."',
+  'Muse: "As an AI, I cannot see that ghost."',
+  'Muse: "I\'m confident. (I am not.)"',
+  'Muse: "Have you tried turning the ghost off and on?"',
+  'Muse: "Done! Please verify. Also everything. Always."',
+  'Muse: "I have added a TODO to the ghost."',
+];
+const OVER_LINES = [
+  'You hit your limit. Resets at 5:00 PM. It is 1:12 AM.',
+  'Muse deployed to prod. Nobody survived the standup.',
+  'Should have checked /usage before the haunted refactor.',
+  'The ghosts were just rate limits all along.',
+  'Next time: ask for less context. Or sell your soul for the Max plan.',
+];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+let bannerTimer = 0, whisperTimer = 0;
+function banner(h, p, color, ms = 1800) {
+  $('bh').textContent = h; $('bh').style.color = color || '#fff'; $('bp').textContent = p || '';
+  $('banner').classList.add('show'); clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => $('banner').classList.remove('show'), ms);
+}
+function whisper(t) {
+  $('whisper').textContent = t; $('whisper').classList.add('show'); clearTimeout(whisperTimer);
+  whisperTimer = setTimeout(() => $('whisper').classList.remove('show'), 3200);
+}
+function flash(color, a = .5) {
+  const f = $('flash'); f.style.background = color; f.style.transition = 'none'; f.style.opacity = a;
+  requestAnimationFrame(() => requestAnimationFrame(() => { f.style.transition = 'opacity .5s'; f.style.opacity = 0; }));
+}
+function setMuse(on, silent) {
+  G.muse = on;
+  document.body.classList.toggle('muse', on);
+  $('mode').textContent = on ? 'MUSE-LITE MODE' : 'CLAUDE MODE';
+  if (silent) return;
+  if (on) {
+    banner('OUT OF TOKENS', pick(MUSE_LINES), '#b36bff', 2600);
+    flash('#b36bff', .6); G.shake = 1.2; G.museTime = 0;
+    teach('muse', 'YOU HIT THE LIMIT', 'Plans have usage limits that reset on a rolling window. A fallback model can keep you moving on simple work, but double-check its output.', 9000);
+    beep(440, .6, 'sawtooth', .06, -380);
+  } else {
+    banner('TOKENS RESTORED', 'Claude is back. Make it count.', '#ff8a1f', 1800);
+    flash('#ff8a1f', .35);
+    beep(300, .35, 'triangle', .06, 600);
+    for (let i = orbs.length - 1; i >= 0; i--) if (orbs[i].fake) popOrb(orbs[i], i);
+  }
+}
+function popOrb(o, i) { burst(o.mesh.position, o.fake ? 0xb36bff : 0xff8a1f, 8); scene.remove(o.mesh); orbs.splice(i, 1); }
+
+function burst(pos, color, n = 10, speed = 6) {
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(.18, .18, .18), new THREE.MeshBasicMaterial({ color, transparent: true }));
+    m.position.copy(pos); m.position.y = Math.max(.5, m.position.y);
+    const a = rand(0, TAU), s = rand(.3, 1) * speed;
+    scene.add(m);
+    parts.push({ mesh: m, vx: Math.cos(a) * s, vz: Math.sin(a) * s, vy: rand(2, 6), life: rand(.4, .8), max: .8 });
+  }
+}
+
+/* ---------- spawning ---------- */
+function ghostMesh(color, r) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .55, roughness: .6, side: THREE.DoubleSide });
+  const top = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10, 0, TAU, 0, Math.PI / 2), mat); top.position.y = 1;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 14, 1, true), mat); body.position.y = .5;
+  const hem = new THREE.Mesh(new THREE.TorusGeometry(1, .12, 6, 14), mat); hem.rotation.x = Math.PI / 2; hem.position.y = 0;
+  const eyeM = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  for (const sx of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(.2, 8, 6), eyeM);
+    e.position.set(sx * .38, 1.05, .82); e.scale.y = 1.4; g.add(e);
+  }
+  g.add(top, body, hem);
+  g.scale.setScalar(r);
+  return g;
+}
+function spawnEnemy(type, at, small) {
+  const T = TYPES[type];
+  if (type === 'overflow') teach('over', 'CONTEXT OVERFLOW', 'The big purple one is a full context window. In Claude Code: /compact summarizes it, /clear starts fresh, /context shows what is filling it. Shoot it down to size.');
+  if (type === 'e429') teach('429', 'ERROR 429', 'HTTP 429 means "too many requests": a rate limit. Slow down, back off, then retry. The red ghosts are fast but fragile.');
+  const r = small ? T.r * .75 : T.r;
+  const mesh = ghostMesh(T.color, r);
+  const pos = at ? at.clone() : randomOpen(14);
+  mesh.position.copy(pos);
+  scene.add(mesh);
+  enemies.push({ mesh, type, r, hp: small ? 1 : T.hp, speed: T.speed * (small ? 1.25 : 1),
+    phase: rand(0, TAU), kx: 0, kz: 0, small });
+}
+function spawnOrb(fake, near) {
+  if (fake) teach('hall', 'HALLUCINATION', 'Flickering tokens are fake. Models can state wrong things with total confidence. In real life: run the tests, read the diff.');
+  const color = fake ? 0xd04bff : 0xff8a1f;
+  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: fake ? .9 : 1.1, roughness: .3 });
+  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(.5, 1), mat);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(.8, .05, 6, 20), new THREE.MeshBasicMaterial({ color }));
+  ring.rotation.x = Math.PI / 2; m.add(ring);
+  const p = near ? near.clone() : randomOpen(5);
+  m.position.set(p.x, 1, p.z);
+  scene.add(m);
+  orbs.push({ mesh: m, fake, life: fake ? 6 : 14, kind: 'tok', ph: rand(0, TAU) });
+}
+function spawnClock() {
+  teach('clock', 'THE RESET CLOCK', 'Usage limits refresh on a timer (about 5 hours on Claude plans). Check your usage before a big task and plan around the reset.');
+  const m = new THREE.Group();
+  const c = new THREE.MeshStandardMaterial({ color: 0x5ad7ff, emissive: 0x2aa8ff, emissiveIntensity: 1.2 });
+  const face = new THREE.Mesh(new THREE.TorusGeometry(.8, .12, 8, 24), c);
+  const h1 = new THREE.Mesh(new THREE.BoxGeometry(.1, .55, .1), c); h1.position.y = .22;
+  const h2 = new THREE.Mesh(new THREE.BoxGeometry(.4, .1, .1), c); h2.position.set(.18, 0, 0);
+  m.add(face, h1, h2);
+  const cp = randomOpen(5); m.position.set(cp.x, 1.3, cp.z);
+  scene.add(m);
+  orbs.push({ mesh: m, fake: false, life: 12, kind: 'clock', ph: 0 });
+  banner('5-HOUR RESET SPOTTED', 'Grab the clock. Full tokens. Ghosts get smitten.', '#5ad7ff', 1800);
+}
+
+/* ---------- input ---------- */
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+  keys[k] = true;
+  if (k === 'm') muted = !muted;
+  if (k === 'p' && state === 'play') {
+    paused = !paused;
+    if (paused) banner('PAUSED', 'Tokens are not draining. Take a breath.', '#fff', 99999);
+    else $('banner').classList.remove('show');
+  }
+  if ((k === 'enter' || k === 'r') && (state === 'title' || state === 'over')) startGame();
+  if (state === 'quiz' && curQuiz && ['1', '2', '3'].includes(k)) answerQuiz(+k - 1);
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+addEventListener('mousedown', e => { if (e.target.tagName !== 'BUTTON') mouseDown = true; });
+addEventListener('mouseup', () => { mouseDown = false; });
+addEventListener('blur', () => { mouseDown = false; for (const k in keys) keys[k] = false; });
+addEventListener('mousemove', e => { mouseNDC.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); });
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+});
+
+/* ---------- HUD / screens ---------- */
+function updateHUD() {
+  const t = Math.max(0, G.tokens);
+  $('fill').style.width = Math.min(100, t) + '%';
+  $('bar').classList.toggle('low', t < 20 && !G.muse);
+  $('tokNum').textContent = G.muse ? 'MUSE ' + Math.floor(t) + ' / 25 TO WAKE CLAUDE' : Math.ceil(t);
+  $('hearts').textContent = '♥'.repeat(Math.max(0, G.hp)) + '♡'.repeat(Math.max(0, 3 - G.hp));
+  $('score').textContent = Math.floor(G.score).toLocaleString();
+  $('wave').textContent = G.wave;
+  $('best').textContent = Math.max(best, Math.floor(G.score)).toLocaleString();
+  $('combo').textContent = G.combo >= 3 ? 'COMBO x' + (1 + Math.min(G.combo, 30) / 10).toFixed(1) : '';
+}
+function titleScreen() {
+  const s = $('screen'); s.classList.remove('hidden');
+  s.innerHTML = `<div class="card">
+    <h1>TOKEN<br>TERROR</h1>
+    <div class="tag">Why does Claude Code run out of tokens, and how do you stop it?<br>Survive the haunted terminal and find out.</div>
+    <div class="rules">
+      <b class="c">CLAUDE MODE</b> &mdash; fast, bright, rapid-fire. But every shot and every second burns tokens.<br>
+      <b class="m">MUSE-LITE MODE</b> &mdash; tokens at zero. Slow, dark, bullets go wherever. Some tokens are <b class="m">hallucinated</b> (they flicker &mdash; don't grab).<br>
+      <b class="g">GET BACK</b> &mdash; eat the dots and grab orange tokens (hit 25 to wake Claude). Clear every dot for a bonus. Kill ghosts for drops. Grab the <b style="color:#5ad7ff">clock</b> for a full 5-hour reset.<br>
+      <b class="g">LEARN</b> &mdash; every ghost and pickup teaches a real concept. Die once? Answer a quiz question right for a free 5-hour reset.
+    </div>
+    <button id="go">&#9654; START (ENTER)</button>
+    <div class="stat best">BEST: ${best.toLocaleString()}</div>
+  </div>`;
+  $('go').onclick = startGame;
+}
+function overScreen() {
+  const s = $('screen'); s.classList.remove('hidden');
+  const sc = Math.floor(G.score), nb = sc > best;
+  if (nb) { best = sc; try { localStorage.setItem('tokenTerrorBest', best); } catch (e) {} }
+  s.innerHTML = `<div class="card">
+    <div class="big" style="color:#ff3355">RATE LIMITED</div>
+    <div class="stat" style="font-size:22px;color:#fff">SCORE ${sc.toLocaleString()}</div>
+    <div class="stat">WAVE ${G.wave} &nbsp;·&nbsp; GHOSTS ${G.kills} &nbsp;·&nbsp; ${Math.floor(G.t)}s &nbsp;·&nbsp; RESETS USED ${G.resets}</div>
+    <div class="stat best">${nb ? '★ NEW BEST ★' : 'BEST ' + best.toLocaleString()}</div>
+    <div class="flavor">${pick(OVER_LINES)}</div>
+    <div class="why" style="font-size:13px"><b style="color:#3dff8a">TOKEN CHEAT SHEET</b><br>
+      1. Be specific: name the file and the problem.<br>
+      2. /context shows what is eating your window.<br>
+      3. /compact when bloated, /clear between unrelated tasks.<br>
+      4. Use a smaller model for easy jobs.<br>
+      5. Keep CLAUDE.md short; it loads every session.<br>
+      6. Verify output. Confident is not correct.</div>
+    <button id="go">&#8635; TRY AGAIN (ENTER)</button>
+  </div>`;
+  $('go').onclick = startGame;
+}
+function startGame() {
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) {}
+  newGame(); state = 'play'; paused = false;
+  $('screen').classList.add('hidden'); $('hud').style.display = 'block';
+  banner('WAVE 1', 'The tokens are draining. Move.', '#ff8a1f', 1600);
+  beep(220, .25, 'triangle', .06, 330);
+  resetTicker();
+  setTimeout(() => state === 'play' && teach('tok', 'WHAT IS A TOKEN?', 'Claude reads and writes in tokens: chunks of text, about ¾ of a word each. Your orange bar is your token budget. Grab orange orbs to refill it.'), 2200);
+}
+function gameOver() {
+  state = 'over'; flash('#ff0033', .7); beep(300, .9, 'sawtooth', .07, -270);
+  burst(player.position, 0xff8a1f, 30, 9);
+  player.visible = false;
+  setTimeout(() => { player.visible = true; if (G.revived) overScreen(); else quizScreen(); }, 700);
+}
+
+/* ---------- learning: lessons, token ticker, revive quiz ---------- */
+const shown = new Set();
+let lessonTimer = 0;
+function teach(id, title, text, ms = 8000) {
+  if (shown.has(id)) return;
+  shown.add(id);
+  $('lesson').innerHTML = `<b>💡 ${title}</b>${text}`;
+  $('lesson').classList.add('show'); clearTimeout(lessonTimer);
+  lessonTimer = setTimeout(() => $('lesson').classList.remove('show'), ms);
+}
+const FRAGS = ['Token', 'ization', ' is', ' how', ' Claude', ' reads', ' text', '.', ' Un', 'believ', 'able', '!'];
+const CHIP_COLS = ['#ff8a1f', '#3dff8a', '#5ad7ff', '#ffd34d', '#b36bff'];
+let fragI = 0;
+function resetTicker() { $('ticker').innerHTML = ''; fragI = 0; }
+function pushToken() {
+  const t = $('ticker');
+  if (!t.children.length) t.innerHTML = '<div style="margin-bottom:4px;letter-spacing:.12em">TOKENS YOU COLLECTED &mdash; Claude reads chunks like these, not whole words</div><div id="chips"></div>';
+  const chips = $('chips'), c = document.createElement('span');
+  c.className = 'chip'; c.textContent = FRAGS[fragI % FRAGS.length]; c.style.background = CHIP_COLS[fragI % CHIP_COLS.length];
+  fragI++; chips.appendChild(c);
+  while (chips.children.length > 7) chips.removeChild(chips.firstChild);
+}
+const QUIZ = [
+  { q: 'Roughly how much text is one token?', ok: 'About ¾ of an English word', bad: ['Exactly one whole word, always', 'Exactly one letter'],
+    why: 'Tokens are chunks. Common words are one token; rare words get split into pieces. English averages ~4 characters per token.' },
+  { q: 'Why do long chats burn tokens faster?', ok: 'The whole conversation is re-read every turn', bad: ['Claude gets tired', 'Longer chats use a bigger model'],
+    why: 'Each turn includes earlier messages, files and tool output (the context). Prompt caching makes repeats cheaper, but a bloated context still costs more.' },
+  { q: 'Your context is bloated but the task is not finished. Best move?', ok: 'Run /compact to summarize it', bad: ['Reinstall everything', 'Repeat your request louder'],
+    why: '/compact summarizes history to free space. /clear starts fresh when the next task is unrelated. /context shows what is filling the window.' },
+  { q: 'Which prompt wastes the fewest tokens?', ok: '"Login test in auth.test.ts fails on empty password. Fix it."', bad: ['"Fix my app."', '"It is broken. Try stuff."'],
+    why: 'Specific prompts mean less searching and fewer retries. Vague ones make the model explore, guess, and redo.' },
+  { q: 'You hit a usage limit. What is true?', ok: 'It resets after a time window; plan around it', bad: ['You are locked out forever', 'Deleting the chat resets it'],
+    why: 'Limits are rolling windows (about 5 hours on Claude plans). Check your usage before a big task, and use smaller models for easy jobs.' },
+  { q: 'A fallback model says "Fixed it!" What should you do?', ok: 'Verify: run the tests and read the diff', bad: ['Ship it. It sounded confident.', 'Ask it again, louder'],
+    why: 'Models can state wrong things confidently (hallucination). Confidence is not correctness, so check the work.' },
+  { q: 'What does a huge CLAUDE.md file cost you?', ok: 'Tokens at the start of every session', bad: ['Nothing, it is free', 'Only when you edit it'],
+    why: 'It is loaded into context every session. Keep it short and specific, and move rarely-needed detail elsewhere.' },
+];
+let curQuiz = null, quizBag = [];
+function quizScreen() {
+  if (!quizBag.length) quizBag = QUIZ.slice().sort(() => Math.random() - .5);
+  const q = quizBag.pop();
+  const opts = [{ t: q.ok, ok: true }, ...q.bad.map(t => ({ t, ok: false }))].sort(() => Math.random() - .5);
+  curQuiz = { q, opts }; state = 'quiz';
+  const s = $('screen'); s.classList.remove('hidden');
+  s.innerHTML = `<div class="card">
+    <div class="big" style="color:#ff3355">OUT OF HEARTS</div>
+    <div class="stat">ANSWER RIGHT = A FREE 5-HOUR RESET (REVIVE)</div>
+    <div class="rules" style="font-size:16px"><b style="color:#fff">${q.q}</b></div>
+    ${opts.map((o, i) => `<button class="quiz-opt" data-i="${i}">${i + 1}. ${o.t}</button>`).join('')}
+  </div>`;
+  s.querySelectorAll('.quiz-opt').forEach(b => b.onclick = () => answerQuiz(+b.dataset.i));
+}
+function answerQuiz(i) {
+  if (state !== 'quiz' || !curQuiz) return;
+  const ok = curQuiz.opts[i] && curQuiz.opts[i].ok, q = curQuiz.q;
+  curQuiz = null; state = 'quizResult';
+  if (ok) shown.add('quiz-' + q.q);
+  $('screen').innerHTML = `<div class="card">
+    <div class="big" style="color:${ok ? '#3dff8a' : '#ff3355'}">${ok ? 'CORRECT' : 'NOPE'}</div>
+    <div class="why"><b style="color:#3dff8a">THE ANSWER:</b> ${q.ok}<br>${q.why}</div>
+    <button id="go">${ok ? '&#9889; 5-HOUR RESET: REVIVE' : 'CONTINUE'}</button>
+  </div>`;
+  $('go').onclick = ok ? revive : overScreen;
+}
+function revive() {
+  G.revived = true; G.hp = 2; G.tokens = 100; G.invuln = 3; G.resets++;
+  enemies.forEach(e => { burst(e.mesh.position, TYPES[e.type].color, 8); scene.remove(e.mesh); });
+  enemies.length = 0;
+  $('screen').classList.add('hidden'); state = 'play';
+  if (G.muse) setMuse(false); else banner('5-HOUR RESET', 'You answered right. Limits refreshed.', '#5ad7ff', 1600);
+  flash('#5ad7ff', .6); beep(400, .5, 'triangle', .07, 900);
+}
+
+/* ---------- update ---------- */
+function hurt() {
+  if (G.invuln > 0) return;
+  G.hp--; G.invuln = 1.5; G.shake = 1; G.combo = 0;
+  flash('#ff0033', .45); beep(120, .3, 'sawtooth', .07, -60);
+  if (G.hp <= 0) gameOver();
+}
+function fire() {
+  const p = player.position, dx = aimPoint.x - p.x, dz = aimPoint.z - p.z;
+  let a = Math.atan2(dz, dx), spd, color, pierce;
+  if (G.muse) {
+    a += rand(-.45, .45); spd = 17; color = 0xa0a0b0; pierce = 1;
+    if (Math.random() < .18) { a = rand(0, TAU); color = 0xb36bff; }  // hallucinated shot
+    G.fireCd = .42; beep(rand(120, 200), .08, 'square', .03);
+  } else {
+    teach('shot', 'EVERY REQUEST COSTS', 'Each shot burns tokens, like each prompt. Vague prompts mean retries, and retries mean wasted tokens. Aim before you fire.');
+    spd = 32; color = 0xffd34d; pierce = 2; G.fireCd = .12; G.tokens -= .7;
+    beep(rand(620, 720), .05, 'square', .025, -250);
+  }
+  const m = new THREE.Mesh(new THREE.SphereGeometry(G.muse ? .22 : .18, 8, 6), new THREE.MeshBasicMaterial({ color }));
+  m.position.set(p.x + Math.cos(a) * 1.1, 1.3, p.z + Math.sin(a) * 1.1);
+  scene.add(m);
+  bullets.push({ mesh: m, vx: Math.cos(a) * spd, vz: Math.sin(a) * spd, life: 1.4, pierce, hit: new Set() });
+}
+function killEnemy(e, i) {
+  scene.remove(e.mesh); enemies.splice(i, 1);
+  const T = TYPES[e.type];
+  G.kills++; G.combo++; G.comboT = 2.5;
+  G.score += T.score * (e.small ? .5 : 1) * (1 + Math.min(G.combo, 30) / 10);
+  burst(e.mesh.position, T.color, e.type === 'overflow' ? 24 : 12, 7);
+  beep(rand(180, 260), .12, 'triangle', .05, -100);
+  if (T.split) for (let k = 0; k < 3; k++) {
+    const off = new THREE.Vector3(rand(-1.5, 1.5), 0, rand(-1.5, 1.5)).add(e.mesh.position);
+    if (hitsWall(off.x, off.z, .7)) off.copy(e.mesh.position);
+    spawnEnemy('limit', off, true);
+  }
+  if (Math.random() < (G.muse ? .5 : .32)) spawnOrb(false, e.mesh.position);
+}
+
+function update(dt) {
+  G.t += dt;
+  const muse = G.muse;
+  G.mv = lerp(G.mv, muse ? 1 : 0, 1 - Math.exp(-4 * dt));
+  const wave = 1 + Math.floor(G.t / 20);
+  if (wave !== G.wave) {
+    G.wave = wave;
+    if (wave === 2) teach('ctx', 'THE CONTEXT TAX', 'Notice the drain getting faster? Every turn re-reads the whole conversation, so long chats cost more. Keep chats focused, and /compact when they bloat.');
+    banner('WAVE ' + wave, wave % 4 === 0 ? 'Context window filling up...' : 'They multiply.', '#ff8a1f', 1500);
+    beep(260, .3, 'triangle', .05, 200);
+  }
+
+  raycaster.setFromCamera(mouseNDC, camera);
+  raycaster.ray.intersectPlane(groundPlane, aimPoint);
+
+  let ix = (keys['d'] || keys['arrowright'] ? 1 : 0) - (keys['a'] || keys['arrowleft'] ? 1 : 0);
+  let iz = (keys['s'] || keys['arrowdown'] ? 1 : 0) - (keys['w'] || keys['arrowup'] ? 1 : 0);
+  const il = Math.hypot(ix, iz) || 1; ix /= il; iz /= il;
+  const speed = muse ? 5.6 : 10, acc = muse ? 4 : 16;
+  const f = 1 - Math.exp(-acc * dt);
+  G.vel.x = lerp(G.vel.x, ix * speed, f); G.vel.z = lerp(G.vel.z, iz * speed, f);
+  if (muse) { G.vel.x += Math.sin(G.t * 3.1) * 6 * dt; G.vel.z += Math.cos(G.t * 2.7) * 6 * dt; } // drift
+  const npx = player.position.x + G.vel.x * dt, npz = player.position.z + G.vel.z * dt;
+  if (!hitsWall(npx, player.position.z, 1)) player.position.x = npx; else G.vel.x = 0;
+  if (!hitsWall(player.position.x, npz, 1)) player.position.z = npz; else G.vel.z = 0;
+  player.rotation.y = Math.atan2(aimPoint.x - player.position.x, aimPoint.z - player.position.z);
+  player.position.y = Math.abs(Math.sin(G.t * 10)) * .1 * Math.min(1, Math.hypot(G.vel.x, G.vel.z) / 5);
+  player.visible = G.invuln <= 0 || Math.floor(G.t * 16) % 2 === 0;
+  G.invuln -= dt;
+
+  if (!muse) {
+    G.tokens -= (3.4 + wave * .38) * dt;
+    G.beepCd -= dt;
+    if (G.tokens < 20 && G.beepCd <= 0) { beep(880, .08, 'square', .04); G.beepCd = .5; }
+    if (G.tokens <= 0) { G.tokens = 0; setMuse(true); }
+  } else {
+    G.museTime += dt;
+    G.whisperCd -= dt;
+    if (G.whisperCd <= 0) { whisper(pick(WHISPERS)); G.whisperCd = rand(7, 11); }
+  }
+
+  G.fireCd -= dt;
+  if ((mouseDown || keys[' ']) && G.fireCd <= 0 && state === 'play') {
+    if (!G.muse && G.tokens < .7) { G.tokens = 0; setMuse(true); } else fire();
+  }
+
+  if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; }
+
+  G.spawnCd -= dt;
+  if (G.spawnCd <= 0) {
+    G.spawnCd = Math.max(.32, 1.5 - wave * .1);
+    if (enemies.length < 10 + wave * 2.5) {
+      const r = Math.random();
+      let type = 'limit';
+      if (wave >= 3 && r < Math.min(.12, wave * .02)) type = 'overflow';
+      else if (wave >= 2 && r < .15 + Math.min(.3, wave * .03)) type = 'e429';
+      spawnEnemy(type);
+      if (wave >= 6 && Math.random() < .35) spawnEnemy('e429');
+    }
+  }
+  G.orbCd -= dt;
+  if (G.orbCd <= 0) {
+    G.orbCd = muse ? 2.6 : 4.5;
+    if (orbs.filter(o => !o.fake && o.kind === 'tok').length < (muse ? 4 : 3)) spawnOrb(false);
+  }
+  if (muse) {
+    G.fakeCd -= dt;
+    if (G.fakeCd <= 0) { G.fakeCd = 1.7; if (orbs.filter(o => o.fake).length < 5) spawnOrb(true); }
+  }
+  G.clockCd -= dt;
+  if (G.clockCd <= 0) { G.clockCd = rand(30, 40); if (!orbs.some(o => o.kind === 'clock')) spawnClock(); }
+
+  // bullets
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.mesh.position.x += b.vx * dt; b.mesh.position.z += b.vz * dt; b.life -= dt;
+    let dead = b.life <= 0 || wallAt(cellOf(b.mesh.position.x), cellOf(b.mesh.position.z));
+    if (dead && b.life > 0) burst(b.mesh.position, 0x3dff8a, 3, 3);
+    if (!dead) for (let j = enemies.length - 1; j >= 0; j--) {
+      const e = enemies[j];
+      if (b.hit.has(e)) continue;
+      if (Math.hypot(e.mesh.position.x - b.mesh.position.x, e.mesh.position.z - b.mesh.position.z) < e.r + .25) {
+        b.hit.add(e); e.hp--; e.kx += b.vx * .04; e.kz += b.vz * .04;
+        burst(b.mesh.position, 0xffffff, 3, 3);
+        if (e.hp <= 0) killEnemy(e, j); else beep(500, .04, 'square', .02);
+        if (--b.pierce <= 0) { dead = true; break; }
+      }
+    }
+    if (dead) { scene.remove(b.mesh); bullets.splice(i, 1); }
+  }
+
+  // enemies
+  const pp = player.position, boost = 1 + Math.min(.9, wave * .05) + (muse ? .12 : 0);
+  updateFlow();
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i], m = e.mesh;
+    const dx = pp.x - m.position.x, dz = pp.z - m.position.z, d = Math.hypot(dx, dz) || 1;
+    const dir = chaseDir(m.position, dx, dz, d);
+    const vx = dir.x * e.speed * boost + e.kx, vz = dir.z * e.speed * boost + e.kz;
+    e.kx *= Math.exp(-6 * dt); e.kz *= Math.exp(-6 * dt);
+    for (let j = i + 1; j < enemies.length; j++) {
+      const o = enemies[j], sx = m.position.x - o.mesh.position.x, sz = m.position.z - o.mesh.position.z, sd = Math.hypot(sx, sz);
+      const min = e.r + o.r;
+      if (sd > 0 && sd < min) {
+        const push = (min - sd) * 3 * dt;
+        m.position.x += sx / sd * push; m.position.z += sz / sd * push;
+        o.mesh.position.x -= sx / sd * push; o.mesh.position.z -= sz / sd * push;
+      }
+    }
+    const rr = Math.min(e.r * .8, 1.3), gx = m.position.x + vx * dt, gz = m.position.z + vz * dt;
+    if (!hitsWall(gx, m.position.z, rr)) m.position.x = gx; else e.kx = 0;
+    if (!hitsWall(m.position.x, gz, rr)) m.position.z = gz; else e.kz = 0;
+    m.position.y = .35 + Math.sin(G.t * 3 + e.phase) * .25;
+    m.rotation.y = Math.atan2(dx, dz);
+    if (d < e.r + .6) { hurt(); e.kx -= dx / d * 14; e.kz -= dz / d * 14; }
+  }
+
+  // orbs / pickups
+  for (let i = orbs.length - 1; i >= 0; i--) {
+    const o = orbs[i], m = o.mesh;
+    o.life -= dt; o.ph += dt * 3;
+    if (o.kind === 'clock') { m.rotation.y += dt * 2; m.position.y = 1.3 + Math.sin(o.ph) * .25; }
+    else {
+      m.rotation.y += dt * 2; m.position.y = 1 + Math.sin(o.ph) * .2;
+      if (o.fake) {
+        m.visible = Math.random() > .22;
+        m.position.x += rand(-.02, .02); m.position.z += rand(-.02, .02);
+        m.scale.setScalar(1 + Math.sin(o.ph * 8) * .08);
+      } else if (o.life < 3) m.visible = Math.floor(o.life * 8) % 2 === 0;
+    }
+    if (o.life <= 0) { popOrb(o, i); continue; }
+    if (Math.hypot(m.position.x - pp.x, m.position.z - pp.z) < 1.5) {
+      if (o.kind === 'clock') {
+        popOrb(o, i);
+        G.tokens = 100; G.resets++; G.score += 100;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          e.hp -= 3;
+          if (e.hp <= 0) killEnemy(e, j);
+          else { const dx = e.mesh.position.x - pp.x, dz = e.mesh.position.z - pp.z, d = Math.hypot(dx, dz) || 1; e.kx += dx / d * 18; e.kz += dz / d * 18; }
+        }
+        flash('#5ad7ff', .6); G.shake = 1.5;
+        beep(400, .5, 'triangle', .07, 900);
+        if (G.muse) setMuse(false); else banner('LIMIT RESET', 'Your 5 hours are up. Ghosts are not.', '#5ad7ff', 1600);
+      } else if (o.fake) {
+        popOrb(o, i); hurt(); whisper('Hallucinated token. Muse: "That was definitely real."'); beep(100, .25, 'sawtooth', .06, 60);
+      } else {
+        popOrb(o, i);
+        G.tokens = Math.min(100, G.tokens + 18); G.score += 5; pushToken();
+        beep(900, .09, 'triangle', .05, 500);
+        if (G.muse && G.tokens >= 25) setMuse(false);
+      }
+    }
+  }
+
+  // pellets (little tokens along the corridors)
+  for (let i = pellets.length - 1; i >= 0; i--) {
+    const pm = pellets[i].mesh;
+    if (Math.hypot(pm.position.x - pp.x, pm.position.z - pp.z) < 1.3) {
+      scene.remove(pm); pellets.splice(i, 1);
+      G.score += 1; G.tokens = Math.min(100, G.tokens + .6); G.waka = !G.waka;
+      beep(G.waka ? 330 : 260, .04, 'triangle', .018);
+      if (G.muse && G.tokens >= 25) setMuse(false);
+    }
+  }
+  if (!pellets.length) {
+    G.score += 500; spawnPellets();
+    banner('BOARD CLEARED', '+500. Fresh context, fresh dots.', '#3dff8a', 1600); beep(500, .4, 'triangle', .06, 600);
+    teach('clear', 'LIKE /clear', 'Wiping the board is like /clear: start the next task with a clean context instead of dragging old baggage along.');
+  }
+
+  // particles
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]; p.life -= dt; p.vy -= 18 * dt;
+    p.mesh.position.x += p.vx * dt; p.mesh.position.z += p.vz * dt; p.mesh.position.y += p.vy * dt;
+    if (p.mesh.position.y < .1) { p.mesh.position.y = .1; p.vy = 0; }
+    p.mesh.material.opacity = Math.max(0, p.life / p.max);
+    if (p.life <= 0) { scene.remove(p.mesh); p.mesh.material.dispose(); parts.splice(i, 1); }
+  }
+
+  updateHUD();
+}
+
+/* ---------- render ---------- */
+let last = performance.now(), time = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.05, (now - last) / 1000); last = now; time += dt;
+  if (state === 'play' && !paused) update(dt);
+  const mv = state === 'play' ? G.mv : 0;
+
+  // lighting reacts to mode: Claude = bright, Muse = tiny dim flickering radius
+  pLight.position.set(player.position.x, 3.2, player.position.z);
+  pLight.distance = lerp(32, 9, mv);
+  pLight.intensity = lerp(2.4, 1.4, mv) * (1 + (mv > .5 ? Math.sin(time * 40) * .12 * Math.random() : 0));
+  pLight.color.setHex(mv > .5 ? 0xb36bff : 0xff8a1f);
+  ambient.intensity = lerp(.7, .15, mv);
+  scene.fog.density = lerp(.016, .07, mv);
+  cornerLights.forEach((l, i) => { l.intensity = (1 + Math.sin(time * 5 + i) * .25) * lerp(1.3, .3, mv); });
+  grid.material.opacity = lerp(.55, .22, mv);
+  border.material.color.setHex(mv > .5 ? 0xb36bff : 0x3dff8a);
+  edgeMat.color.copy(border.material.color);
+
+  let sh = 0;
+  if (state === 'play') { sh = G.shake; G.shake = Math.max(0, G.shake - dt * 3); }
+  const idle = state !== 'play';
+  const tx = idle ? 0 : player.position.x * .85, tz = idle ? 0 : player.position.z * .85;
+  const cx = idle ? Math.sin(time * .15) * 20 : tx, cz = idle ? 14 + Math.cos(time * .15) * 6 : tz + 15;
+  const k = 1 - Math.exp(-6 * dt);
+  camera.position.x = lerp(camera.position.x, cx, k) + (sh ? rand(-sh, sh) * .3 : 0);
+  camera.position.z = lerp(camera.position.z, cz, k) + (sh ? rand(-sh, sh) * .3 : 0);
+  camera.position.y = lerp(camera.position.y, idle ? 26 : 27 + mv * 3, 1 - Math.exp(-3 * dt));
+  camera.lookAt(tx, 0, tz);
+  camera.rotation.z += mv * Math.sin(time * 1.3) * .03;
+  player.userData.cursor.visible = Math.floor(time * 2) % 2 === 0;
+  // Clawd desaturates to a sad purple-grey in Muse mode; legs scurry when moving
+  const sk = player.userData.skin;
+  sk.color.setHex(0xd97757).lerp(new THREE.Color(0x7a6a96), mv); sk.emissive.copy(sk.color);
+  const moving = state === 'play' ? Math.min(1, Math.hypot(G.vel.x, G.vel.z) / 4) : 0;
+  player.userData.legs.forEach((l, i) => { l.scale.y = 1 - moving * .3 * (Math.sin(time * 18 + i * 1.6) * .5 + .5); l.position.y = .4 * l.scale.y; });
+
+  renderer.render(scene, camera);
+}
+
+newGame();
+titleScreen();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
